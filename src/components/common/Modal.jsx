@@ -14,7 +14,7 @@ const getFocusable = (container) => (container ? [...container.querySelectorAll(
  * - rendered into <body> through a portal (never clipped by parent containers)
  * - Escape / backdrop click closes it (unless closeDisabled, e.g. while deleting)
  * - Tab stays inside the dialog, and focus returns to the opening button on close
- * - bottom sheet on mobile, centred on larger screens
+ * - bottom sheet on mobile, centred on larger screens; long content scrolls inside
  */
 export default function Modal({
   open,
@@ -99,9 +99,9 @@ export default function Modal({
         aria-labelledby={titleId}
         aria-describedby={description ? descriptionId : undefined}
         tabIndex={-1}
-        className={`relative w-full ${SIZES[size]} rounded-2xl bg-white shadow-xl focus:outline-none`}
+        className={`relative flex max-h-[calc(100dvh-2rem)] w-full ${SIZES[size]} flex-col rounded-2xl bg-white shadow-xl focus:outline-none`}
       >
-        <div className={`flex items-start justify-between gap-4 px-6 pt-6 ${children ? "" : "pb-6"}`}>
+        <div className={`flex shrink-0 items-start justify-between gap-4 px-6 pt-6 ${children ? "" : "pb-6"}`}>
           <div className="min-w-0">
             <h2 id={titleId} className="text-lg font-semibold text-slate-900">
               {title}
@@ -123,10 +123,10 @@ export default function Modal({
           </button>
         </div>
 
-        {children && <div className="px-6 py-5">{children}</div>}
+        {children && <div className="overflow-y-auto px-6 py-5">{children}</div>}
 
         {footer && (
-          <div className="flex flex-col-reverse gap-2 border-t border-slate-100 px-6 py-4 sm:flex-row sm:justify-end">
+          <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-slate-100 px-6 py-4 sm:flex-row sm:justify-end">
             {footer}
           </div>
         )}

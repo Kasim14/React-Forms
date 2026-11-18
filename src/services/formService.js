@@ -2,6 +2,7 @@ import { ApiError } from "./apiError.js";
 import { SEED_FORMS } from "./mockData.js";
 import { createEmptyForm, FORM_STATUS } from "../../shared/formDefaults.js";
 import { isValidSlug, makeUniqueSlug, slugify } from "../../shared/slug.js";
+import { getPublishIssues } from "../../shared/validateForm.js";
 
 /**
  * ⚠️ TEMPORARY MOCK (Phases 2–4).
@@ -118,7 +119,7 @@ export async function updateForm(id, changes = {}) {
   return copyOf(form);
 }
 
-/** Publish or unpublish. A form needs at least one question to be published. */
+/** Publish or unpublish. Publishing uses the same rules as the builder (shared/validateForm.js). */
 export async function setFormStatus(id, status) {
   await delay();
   if (!Object.values(FORM_STATUS).includes(status)) {
@@ -126,8 +127,11 @@ export async function setFormStatus(id, status) {
   }
 
   const form = findFormOrThrow(id);
-  if (status === FORM_STATUS.PUBLISHED && form.questions.length === 0) {
-    throw new ApiError("Add at least one question before publishing.", { status: 400, code: "NO_QUESTIONS" });
+  if (status === FORM_STATUS.PUBLISHED) {
+    const issues = getPublishIssues(form);
+    if (issues.length > 0) {
+      throw new ApiError(issues[0].message, { status: 400, code: "FORM_NOT_READY" });
+    }
   }
 
   form.status = status;
