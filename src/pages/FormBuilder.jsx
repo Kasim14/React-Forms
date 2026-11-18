@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, Loader2, MonitorSmartphone, MousePointerClick } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Loader2, MousePointerClick } from "lucide-react";
 import Button from "../components/common/Button.jsx";
 import EmptyState from "../components/common/EmptyState.jsx";
 import ConfirmDialog from "../components/common/ConfirmDialog.jsx";
@@ -8,6 +8,7 @@ import BuilderHeader from "../components/form-builder/BuilderHeader.jsx";
 import QuestionList from "../components/form-builder/QuestionList.jsx";
 import QuestionEditor from "../components/form-builder/QuestionEditor.jsx";
 import AddQuestionModal from "../components/form-builder/AddQuestionModal.jsx";
+import PreviewPanel from "../components/form-builder/PreviewPanel.jsx";
 import { useFormBuilder } from "../hooks/useFormBuilder.js";
 import { useToast } from "../hooks/useToast.js";
 import { setFormStatus } from "../services/formService.js";
@@ -145,7 +146,7 @@ function FormBuilder({ formId }) {
         onTogglePublish={handleTogglePublish}
       />
 
-      <div className="grid flex-1 grid-cols-1 items-start gap-4 p-4 lg:grid-cols-[300px_minmax(0,1fr)_340px]">
+      <div className="grid flex-1 grid-cols-1 items-start gap-4 p-4 lg:grid-cols-[300px_minmax(0,1fr)_360px]">
         <QuestionList
           questions={form.questions}
           selectedId={selectedId}
@@ -176,13 +177,7 @@ function FormBuilder({ formId }) {
           />
         )}
 
-        <section className="rounded-xl border border-slate-200 bg-white p-5" aria-label="Live preview">
-          <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-            <MonitorSmartphone className="h-4 w-4 text-brand-600" aria-hidden="true" />
-            Live preview
-          </div>
-          <p className="mt-2 text-sm text-slate-500">The live preview is added in Phase 3.2.</p>
-        </section>
+        <PreviewPanel form={form} question={selectedQuestion} index={selectedIndex} />
       </div>
 
       <AddQuestionModal open={addOpen} onClose={() => setAddOpen(false)} onSelect={handleAddQuestion} />

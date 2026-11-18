@@ -1,19 +1,35 @@
+import { useState } from "react";
 import Input from "../common/Input.jsx";
+import Select from "../common/Select.jsx";
 import Textarea from "../common/Textarea.jsx";
 import Toggle from "../common/Toggle.jsx";
+import ConfirmDialog from "../common/ConfirmDialog.jsx";
 import QuestionTypeIcon from "../question-types/QuestionTypeIcon.jsx";
-import { QUESTION_TYPES } from "../../../shared/questionTypes.js";
+import QuestionSettings from "./settings/QuestionSettings.jsx";
+import {
+  changeQuestionType,
+  QUESTION_TYPE_GROUPS,
+  QUESTION_TYPES,
+  wouldLoseOptions,
+} from "../../../shared/questionTypes.js";
 
-/**
- * Edits the fields every question has.
- * Type-specific settings (options, rating, scale…) are added in Phase 3.2.
- */
 export default function QuestionEditor({ question, index, autoFocusTitle, onChange }) {
   const definition = QUESTION_TYPES[question.type];
-  const hasTypeSettings = definition.hasOptions || Object.keys(definition.defaultSettings ?? {}).length > 0;
+  const [pendingType, setPendingType] = useState(null); // type waiting for "you'll lose options" confirmation
 
   // Returns an onChange handler for a text field: field("title") → updates question.title
   const field = (name) => (event) => onChange({ [name]: event.target.value });
+
+  function applyType(newType) {
+    onChange(changeQuestionType(question, newType));
+    setPendingType(null);
+  }
+
+  function requestTypeChange(newType) {
+    if (newType === question.type) return;
+    if (wouldLoseOptions(question, newType)) setPendingType(newType);
+    else applyType(newType);
+  }
 
   return (
     <section className="rounded-xl border border-slate-200 bg-white" aria-labelledby="question-editor-heading">
@@ -49,15 +65,33 @@ export default function QuestionEditor({ question, index, autoFocusTitle, onChan
           onChange={field("description")}
         />
 
-        {definition.supportsPlaceholder && (
-          <Input
-            label="Placeholder"
-            hint="Grey hint text shown inside the empty answer box."
-            maxLength={100}
-            value={question.placeholder}
-            onChange={field("placeholder")}
-          />
-        )}
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <Select
+            label="Question type"
+            value={question.type}
+            onChange={(event) => requestTypeChange(event.target.value)}
+          >
+            {QUESTION_TYPE_GROUPS.map((group) => (
+              <optgroup key={group.label} label={group.label}>
+                {group.types.map((type) => (
+                  <option key={type} value={type}>
+                    {QUESTION_TYPES[type].label}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </Select>
+
+          {definition.supportsPlaceholder && (
+            <Input
+              label="Placeholder"
+              hint="Grey hint text shown before answering."
+              maxLength={100}
+              value={question.placeholder}
+              onChange={field("placeholder")}
+            />
+          )}
+        </div>
 
         <div className="rounded-lg border border-slate-200 p-4">
           <Toggle
@@ -68,12 +102,22 @@ export default function QuestionEditor({ question, index, autoFocusTitle, onChan
           />
         </div>
 
-        {hasTypeSettings && (
-          <p className="rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-500">
-            Answer options and {definition.label.toLowerCase()} settings are added in the next part (Phase 3.2).
-          </p>
-        )}
+        <QuestionSettings question={question} onChange={onChange} />
       </div>
+
+      <ConfirmDialog
+        open={pendingType !== null}
+        title="Change question type?"
+        description={
+          pendingType
+            ? `${QUESTION_TYPES[pendingType].label} questions don't use answer options, so this question's options will be removed.`
+            : ""
+        }
+        confirmLabel="Change type"
+        tone="primary"
+        onConfirm={() => applyType(pendingType)}
+        onCancel={() => setPendingType(null)}
+      />
     </section>
   );
 }
