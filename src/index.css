@@ -1,0 +1,45 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens.
+ * In Tailwind v4, variables inside @theme automatically become utility classes.
+ * e.g. --color-brand-500 → bg-brand-500, text-brand-500, border-brand-500, ring-brand-500
+ *
+ * Brand scale built around Reelo Teal #01999F (500), using Reelo Dark Teal
+ * #023342 (900) and Darkest Teal #00151C (950) at the deep end.
+ */
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  --color-brand-50: #e6f7f7;
+  --color-brand-100: #c2eded;
+  --color-brand-200: #8edddf;
+  --color-brand-300: #4fc8cb;
+  --color-brand-400: #1ab0b5;
+  --color-brand-500: #01999f;
+  --color-brand-600: #017f85;
+  --color-brand-700: #02666b;
+  --color-brand-800: #034e55;
+  --color-brand-900: #023342;
+  --color-brand-950: #00151c;
+
+  /* Reelo Yellow, for occasional highlights only */
+  --color-accent-400: #ffd952;
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-900;
+  }
+
+  /* Visible focus ring for keyboard users, on every focusable element */
+  :focus-visible {
+    outline: 2px solid var(--color-brand-500);
+    outline-offset: 2px;
+  }
+}
