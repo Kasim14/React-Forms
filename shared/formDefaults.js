@@ -7,6 +7,7 @@ export const FORM_STATUS = Object.freeze({
 /**
  * The starting content of every new form.
  * The service (and later the API) adds: id, slug, status, createdAt, updatedAt.
+ * Empty welcome title/description = fall back to the form's title/description.
  */
 export function createEmptyForm({ title = "Untitled form" } = {}) {
   return {
@@ -15,7 +16,7 @@ export function createEmptyForm({ title = "Untitled form" } = {}) {
     questions: [],
     welcomeScreen: {
       enabled: true,
-      title,
+      title: "",
       description: "",
       buttonText: "Start",
     },

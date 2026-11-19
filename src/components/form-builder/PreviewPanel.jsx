@@ -1,12 +1,16 @@
 import { useState } from "react";
 import { MonitorSmartphone } from "lucide-react";
 import QuestionView from "../survey/QuestionView.jsx";
+import WelcomeScreen from "../survey/WelcomeScreen.jsx";
+import ThankYouScreen from "../survey/ThankYouScreen.jsx";
+import { SECTION } from "./builderSections.js";
+import { getWelcomeContent } from "../../utils/formScreens.js";
 
 /**
- * Live preview of the selected question, using the real survey components.
- * Answers typed here are kept only in this panel and are never saved.
+ * Live preview of whatever is selected (welcome screen, a question, or the thank-you screen),
+ * using the real survey components. Answers typed here are never saved.
  */
-export default function PreviewPanel({ form, question, index }) {
+export default function PreviewPanel({ form, selectedId, question, index }) {
   const [answers, setAnswers] = useState({});
   const total = form.questions.length;
   const showProgress = form.settings?.showProgress !== false;
@@ -14,6 +18,42 @@ export default function PreviewPanel({ form, question, index }) {
 
   // Keyed by id AND type: after a type change, the old answer shape is dropped.
   const answerKey = question ? `${question.id}:${question.type}` : null;
+
+  let body;
+  let centered = true; // screens are vertically centred; questions start at the top
+
+  if (selectedId === SECTION.THANK_YOU) {
+    body = <ThankYouScreen form={form} />;
+  } else if (selectedId === SECTION.WELCOME || selectedId === SECTION.SETTINGS) {
+    body = getWelcomeContent(form).enabled ? (
+      <WelcomeScreen form={form} />
+    ) : (
+      <p className="text-center text-sm text-slate-400">
+        The welcome screen is turned off. Respondents start at question 1.
+      </p>
+    );
+  } else if (question) {
+    centered = false;
+    body = (
+      <>
+        <QuestionView
+          question={question}
+          number={showNumbers ? index + 1 : null}
+          value={answers[answerKey]}
+          onChange={(value) => setAnswers((current) => ({ ...current, [answerKey]: value }))}
+        />
+        {/* Visual only: the real button arrives with the survey in Phase 4 */}
+        <div className="mt-8 flex items-center gap-3" aria-hidden="true">
+          <span className="inline-flex h-10 items-center rounded-lg bg-brand-500 px-5 text-sm font-medium text-white">
+            {index === total - 1 ? "Submit" : "OK"}
+          </span>
+          <span className="text-xs text-slate-400">press Enter ↵</span>
+        </div>
+      </>
+    );
+  } else {
+    body = <p className="text-center text-sm text-slate-400">Select a question or screen to preview it here.</p>;
+  }
 
   return (
     <section className="rounded-xl border border-slate-200 bg-white lg:sticky lg:top-24" aria-labelledby="preview-heading">
@@ -34,27 +74,7 @@ export default function PreviewPanel({ form, question, index }) {
             </div>
           )}
 
-          <div className="min-h-105 px-5 py-8">
-            {question ? (
-              <>
-                <QuestionView
-                  question={question}
-                  number={showNumbers ? index + 1 : null}
-                  value={answers[answerKey]}
-                  onChange={(value) => setAnswers((current) => ({ ...current, [answerKey]: value }))}
-                />
-                {/* Visual only: the real button arrives with the survey in Phase 4 */}
-                <div className="mt-8 flex items-center gap-3" aria-hidden="true">
-                  <span className="inline-flex h-10 items-center rounded-lg bg-brand-500 px-5 text-sm font-medium text-white">
-                    {index === total - 1 ? "Submit" : "OK"}
-                  </span>
-                  <span className="text-xs text-slate-400">press Enter ↵</span>
-                </div>
-              </>
-            ) : (
-              <p className="pt-24 text-center text-sm text-slate-400">Select a question to preview it here.</p>
-            )}
-          </div>
+          <div className={`flex min-h-105 flex-col px-5 py-8 ${centered ? "justify-center" : ""}`}>{body}</div>
 
           {question && (
             <div className="border-t border-slate-100 px-5 py-2 text-xs text-slate-400">

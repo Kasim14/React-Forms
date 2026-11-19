@@ -9,11 +9,17 @@ import QuestionList from "../components/form-builder/QuestionList.jsx";
 import QuestionEditor from "../components/form-builder/QuestionEditor.jsx";
 import AddQuestionModal from "../components/form-builder/AddQuestionModal.jsx";
 import PreviewPanel from "../components/form-builder/PreviewPanel.jsx";
+import WelcomeScreenEditor from "../components/form-builder/WelcomeScreenEditor.jsx";
+import ThankYouScreenEditor from "../components/form-builder/ThankYouScreenEditor.jsx";
+import FormSettingsEditor from "../components/form-builder/FormSettingsEditor.jsx";
+import MobileTabs from "../components/form-builder/MobileTabs.jsx";
+import { SECTION } from "../components/form-builder/builderSections.js";
 import { useFormBuilder } from "../hooks/useFormBuilder.js";
 import { useToast } from "../hooks/useToast.js";
-import { setFormStatus } from "../services/formService.js";
+import { setFormStatus, updateForm } from "../services/formService.js";
 import { copyToClipboard } from "../utils/clipboard.js";
 import { getPublicFormUrl } from "../utils/formUrl.js";
+import { getWelcomeContent } from "../utils/formScreens.js";
 import { FORM_STATUS } from "../../shared/formDefaults.js";
 import { getPublishIssues } from "../../shared/validateForm.js";
 
@@ -26,6 +32,9 @@ export default function FormBuilderPage() {
   return <FormBuilder key={id} formId={id} />;
 }
 
+/** On mobile only the active tab's panel shows; on desktop (lg) all panels show. */
+const panelClass = (tab, activeTab) => `${tab === activeTab ? "block" : "hidden"} lg:block`;
+
 function FormBuilder({ formId }) {
   const navigate = useNavigate();
   const toast = useToast();
@@ -35,6 +44,7 @@ function FormBuilder({ formId }) {
   const [justAddedId, setJustAddedId] = useState(null);
   const [questionToDelete, setQuestionToDelete] = useState(null);
   const [publishing, setPublishing] = useState(false);
+  const [mobileTab, setMobileTab] = useState("structure");
 
   /* ---------- Loading / error screens ---------- */
 
@@ -65,6 +75,7 @@ function FormBuilder({ formId }) {
   /* ---------- Handlers ---------- */
 
   const selectedIndex = form.questions.findIndex((q) => q.id === selectedId);
+  const isPublished = form.status === FORM_STATUS.PUBLISHED;
 
   /** Save pending changes first, then run `next` (leave, preview…). */
   async function saveThen(next) {
@@ -76,10 +87,17 @@ function FormBuilder({ formId }) {
     }
   }
 
+  /** Selecting something in the list also opens the Edit tab on mobile. */
+  function handleSelect(id) {
+    actions.selectQuestion(id);
+    setMobileTab("edit");
+  }
+
   function handleAddQuestion(type) {
     const question = actions.addQuestion(type);
     setJustAddedId(question.id);
     setAddOpen(false);
+    setMobileTab("edit");
   }
 
   function handleDeleteRequest(question) {
@@ -99,15 +117,21 @@ function FormBuilder({ formId }) {
     else toast.error(`Couldn't copy automatically. Link: ${url}`);
   }
 
-  async function handleTogglePublish() {
-    const isPublished = form.status === FORM_STATUS.PUBLISHED;
+  /** Saved separately from autosave (see SlugEditor). Errors are shown by SlugEditor itself. */
+  async function handleSaveSlug(slug) {
+    await actions.flush(); // one save at a time
+    const updated = await updateForm(form.id, { slug });
+    actions.applyServerChanges({ slug: updated.slug, updatedAt: updated.updatedAt });
+    toast.success("Public URL updated.");
+  }
 
+  async function handleTogglePublish() {
     // Check the form is ready BEFORE contacting the server, and jump to the problem question.
     if (!isPublished) {
       const issues = getPublishIssues(form);
       if (issues.length > 0) {
         toast.error(issues[0].message);
-        if (issues[0].questionId) actions.selectQuestion(issues[0].questionId);
+        if (issues[0].questionId) handleSelect(issues[0].questionId);
         return;
       }
     }
@@ -130,6 +154,47 @@ function FormBuilder({ formId }) {
     }
   }
 
+  /* ---------- Centre panel: what's being edited ---------- */
+
+  let editor;
+  if (selectedId === SECTION.WELCOME) {
+    editor = <WelcomeScreenEditor form={form} onChange={actions.updateForm} />;
+  } else if (selectedId === SECTION.THANK_YOU) {
+    editor = <ThankYouScreenEditor form={form} onChange={actions.updateForm} />;
+  } else if (selectedId === SECTION.SETTINGS) {
+    editor = <FormSettingsEditor form={form} onChange={actions.updateForm} onSaveSlug={handleSaveSlug} />;
+  } else if (selectedQuestion) {
+    editor = (
+      <div className="space-y-3">
+        {isPublished && (
+          <p className="flex items-start gap-2 rounded-lg bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+            This form is live. Changing a question's type or options affects how new answers are recorded.
+          </p>
+        )}
+        <QuestionEditor
+          key={selectedQuestion.id}
+          question={selectedQuestion}
+          index={selectedIndex}
+          autoFocusTitle={selectedQuestion.id === justAddedId}
+          onChange={(changes) => actions.updateQuestion(selectedQuestion.id, changes)}
+        />
+      </div>
+    );
+  } else {
+    editor = (
+      <EmptyState
+        icon={MousePointerClick}
+        title={form.questions.length ? "Select a question" : "Add your first question"}
+        description={
+          form.questions.length
+            ? "Choose a question or screen from the list to edit it."
+            : "Use the “Add” button to choose a question type."
+        }
+      />
+    );
+  }
+
   /* ---------- Layout ---------- */
 
   return (
@@ -146,39 +211,29 @@ function FormBuilder({ formId }) {
         onTogglePublish={handleTogglePublish}
       />
 
-      <div className="grid flex-1 grid-cols-1 items-start gap-4 p-4 lg:grid-cols-[300px_minmax(0,1fr)_360px]">
-        <QuestionList
-          questions={form.questions}
-          selectedId={selectedId}
-          onSelect={actions.selectQuestion}
-          onAdd={() => setAddOpen(true)}
-          onMove={actions.moveQuestion}
-          onDuplicate={actions.duplicateQuestion}
-          onDelete={handleDeleteRequest}
-        />
-
-        {selectedQuestion ? (
-          <QuestionEditor
-            key={selectedQuestion.id}
-            question={selectedQuestion}
-            index={selectedIndex}
-            autoFocusTitle={selectedQuestion.id === justAddedId}
-            onChange={(changes) => actions.updateQuestion(selectedQuestion.id, changes)}
+      {/* pb-24 on mobile leaves room for the bottom tab bar */}
+      <div className="grid flex-1 grid-cols-1 items-start gap-4 p-4 pb-24 lg:grid-cols-[300px_minmax(0,1fr)_360px] lg:pb-4">
+        <div className={panelClass("structure", mobileTab)}>
+          <QuestionList
+            questions={form.questions}
+            selectedId={selectedId}
+            welcomeEnabled={getWelcomeContent(form).enabled}
+            onSelect={handleSelect}
+            onAdd={() => setAddOpen(true)}
+            onMove={actions.moveQuestion}
+            onDuplicate={actions.duplicateQuestion}
+            onDelete={handleDeleteRequest}
           />
-        ) : (
-          <EmptyState
-            icon={MousePointerClick}
-            title={form.questions.length ? "Select a question" : "Add your first question"}
-            description={
-              form.questions.length
-                ? "Choose a question from the list to edit it."
-                : "Use the “Add” button to choose a question type."
-            }
-          />
-        )}
+        </div>
 
-        <PreviewPanel form={form} question={selectedQuestion} index={selectedIndex} />
+        <div className={panelClass("edit", mobileTab)}>{editor}</div>
+
+        <div className={panelClass("preview", mobileTab)}>
+          <PreviewPanel form={form} selectedId={selectedId} question={selectedQuestion} index={selectedIndex} />
+        </div>
       </div>
+
+      <MobileTabs active={mobileTab} onChange={setMobileTab} />
 
       <AddQuestionModal open={addOpen} onClose={() => setAddOpen(false)} onSelect={handleAddQuestion} />
 
