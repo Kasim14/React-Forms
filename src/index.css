@@ -3,7 +3,7 @@
 /*
  * Design tokens.
  * In Tailwind v4, variables inside @theme automatically become utility classes.
- * e.g. --color-brand-500 → bg-brand-500, text-brand-500, border-brand-500, ring-brand-500
+ * e.g. --color-brand-500 → bg-brand-500, --animate-survey-forward → animate-survey-forward
  *
  * Brand scale built around Reelo Teal #01999F (500), using Reelo Dark Teal
  * #023342 (900) and Darkest Teal #00151C (950) at the deep end.
@@ -23,8 +23,34 @@
   --color-brand-900: #023342;
   --color-brand-950: #00151c;
 
-  /* Reelo Yellow, for occasional highlights only */
+  /* Reelo Yellow, for occasional highlights only (e.g. rating stars) */
   --color-accent-400: #ffd952;
+
+  /* Survey step transitions: next question slides up, going back slides down */
+  --animate-survey-forward: survey-forward 0.35s ease-out both;
+  --animate-survey-back: survey-back 0.35s ease-out both;
+
+  @keyframes survey-forward {
+    from {
+      opacity: 0;
+      transform: translateY(24px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes survey-back {
+    from {
+      opacity: 0;
+      transform: translateY(-24px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
 }
 
 @layer base {

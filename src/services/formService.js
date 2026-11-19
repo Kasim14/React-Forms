@@ -3,47 +3,62 @@ import { SEED_FORMS } from "./mockData.js";
 import { createEmptyForm, FORM_STATUS } from "../../shared/formDefaults.js";
 import { isValidSlug, makeUniqueSlug, slugify } from "../../shared/slug.js";
 import { getPublishIssues } from "../../shared/validateForm.js";
+import { findRespondentEmail, validateSubmission } from "../../shared/validateAnswer.js";
 
 /**
  * ⚠️ TEMPORARY MOCK (Phases 2–4).
- * Stores forms in localStorage. In Phase 5 the inside of every function here
- * is replaced with a call to our API. The function names, arguments, return
- * values and thrown ApiErrors stay exactly the same, so components don't change.
+ * Stores forms and responses in localStorage. In Phase 5 the inside of every
+ * function here is replaced with a call to our API. The function names,
+ * arguments, return values and thrown ApiErrors stay exactly the same.
  */
 
 const STORAGE_KEY = "reelo-forms:mock-forms:v1";
+const RESPONSES_KEY = "reelo-forms:mock-responses:v1";
 const FAKE_LATENCY_MS = 350;
 
-let cache = null; // in-memory copy, so the app still works if localStorage is blocked
+let cache = null; // forms, in memory
+let responsesCache = null; // responses, in memory
 
 const delay = () => new Promise((resolve) => setTimeout(resolve, FAKE_LATENCY_MS));
 const nowIso = () => new Date().toISOString();
 const newFormId = () => `frm_${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
 const copyOf = (value) => structuredClone(value); // never hand out references to stored objects
 
-function loadStore() {
-  if (cache) return cache;
+/* ---------- Storage helpers ---------- */
+
+function readJson(key) {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      cache = JSON.parse(raw);
-      return cache;
-    }
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
   } catch {
-    // Corrupt or unavailable storage: fall back to the sample data below.
+    return null; // corrupt or unavailable storage
   }
-  cache = copyOf(SEED_FORMS);
-  saveStore();
-  return cache;
 }
 
-function saveStore() {
+function writeJson(key, value) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(cache));
+    localStorage.setItem(key, JSON.stringify(value));
   } catch {
     // Storage full or blocked: data still lives in memory for this session.
   }
 }
+
+function loadStore() {
+  if (!cache) {
+    cache = readJson(STORAGE_KEY) ?? copyOf(SEED_FORMS);
+    saveStore();
+  }
+  return cache;
+}
+
+const saveStore = () => writeJson(STORAGE_KEY, cache);
+
+function loadResponses() {
+  if (!responsesCache) responsesCache = readJson(RESPONSES_KEY) ?? [];
+  return responsesCache;
+}
+
+const saveResponses = () => writeJson(RESPONSES_KEY, responsesCache);
 
 function findFormOrThrow(id) {
   const form = loadStore().find((f) => f.id === id);
@@ -53,10 +68,24 @@ function findFormOrThrow(id) {
   return form;
 }
 
+const findPublishedBySlug = (slug) =>
+  loadStore().find((f) => f.slug === slug && f.status === FORM_STATUS.PUBLISHED) ?? null;
+
 const slugsInUse = (exceptId) => loadStore().filter((f) => f.id !== exceptId).map((f) => f.slug);
 
+/** Only what respondents need. Internal fields (id, counts, dates) never go public. */
+const toPublicForm = (form) => ({
+  slug: form.slug,
+  title: form.title,
+  description: form.description,
+  questions: form.questions,
+  welcomeScreen: form.welcomeScreen,
+  thankYouScreen: form.thankYouScreen,
+  settings: form.settings,
+});
+
 /* ------------------------------------------------------------------ */
-/* Public functions (this list is the contract the API will match)     */
+/* Admin functions                                                     */
 /* ------------------------------------------------------------------ */
 
 /** All forms, newest first, each including `responseCount`. */
@@ -168,4 +197,70 @@ export async function deleteForm(id) {
   findFormOrThrow(id);
   cache = loadStore().filter((f) => f.id !== id);
   saveStore();
+}
+
+/** Responses for one form, newest first (the Responses page is built in Phase 5). */
+export async function listResponses(formId) {
+  await delay();
+  findFormOrThrow(formId);
+  const responses = loadResponses()
+    .filter((r) => r.formId === formId)
+    .sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
+  return copyOf(responses);
+}
+
+/* ------------------------------------------------------------------ */
+/* Public functions (no login needed)                                  */
+/* ------------------------------------------------------------------ */
+
+/** A published form by its slug. Drafts and unknown slugs both give 404. */
+export async function getPublicForm(slug) {
+  await delay();
+  const form = findPublishedBySlug(slug);
+  if (!form) {
+    throw new ApiError("This form isn't available.", { status: 404, code: "FORM_NOT_FOUND" });
+  }
+  return copyOf(toPublicForm(form));
+}
+
+/**
+ * Saves a response. Safe to call twice with the same submissionId:
+ * the second call is treated as success and saves nothing new.
+ */
+export async function submitResponse(slug, { submissionId, answers, durationSec } = {}) {
+  await delay();
+
+  const form = findPublishedBySlug(slug);
+  if (!form) {
+    throw new ApiError("This form is no longer accepting responses.", { status: 404, code: "FORM_NOT_FOUND" });
+  }
+  if (typeof submissionId !== "string" || submissionId.length < 10 || submissionId.length > 100) {
+    throw new ApiError("Invalid submission.", { status: 400, code: "INVALID_SUBMISSION" });
+  }
+
+  const responses = loadResponses();
+  if (responses.some((r) => r.id === submissionId)) {
+    return { ok: true, duplicate: true }; // already saved: don't save twice
+  }
+
+  const { errors, cleaned } = validateSubmission(form, answers);
+  if (Object.keys(errors).length > 0) {
+    throw new ApiError("Some answers need your attention.", { status: 400, code: "INVALID_ANSWERS", fields: errors });
+  }
+
+  responses.push({
+    id: submissionId,
+    formId: form.id,
+    formTitle: form.title,
+    submittedAt: nowIso(),
+    respondentEmail: findRespondentEmail(form, cleaned),
+    answers: cleaned,
+    meta: { durationSec: Number.isFinite(durationSec) ? Math.max(0, Math.round(durationSec)) : null },
+  });
+  saveResponses();
+
+  form.responseCount = (form.responseCount ?? 0) + 1;
+  saveStore();
+
+  return { ok: true, duplicate: false };
 }
